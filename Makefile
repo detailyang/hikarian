@@ -1,6 +1,10 @@
 GOPATH := $(shell pwd)
 .PHONY: clean test
 
+all:
+		@GOPATH=$(GOPATH) go install tunnel
+		@GOPATH=$(GOPATH) go install socks5
+	
 tunnel:
 		@GOPATH=$(GOPATH) go install tunnel
 
