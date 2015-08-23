@@ -27,3 +27,4 @@ _testmain.go
 *.prof
 
 bin/
+pkg/
