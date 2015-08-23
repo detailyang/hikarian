@@ -2,7 +2,7 @@
 * @Author: detailyang
 * @Date:   2015-08-21 00:12:01
 * @Last Modified by:   detailyang
-* @Last Modified time: 2015-08-23 21:52:40
+* @Last Modified time: 2015-08-23 23:17:27
  */
 
 package hikariansocks5
@@ -153,8 +153,10 @@ func (self *HikarianSocks5) pipe(dst net.Conn, src net.Conn) {
 	_, err := io.Copy(dst, src)
 	if err != nil {
 		log.Println("io copy error ", err)
-		dst.Close()
-		src.Close()
+		d := dst.(*net.TCPConn)
+		s := src.(*net.TCPConn)
+		d.CloseWrite()
+		s.CloseRead()
 	}
 }
 
