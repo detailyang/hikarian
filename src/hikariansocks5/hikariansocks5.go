@@ -2,7 +2,7 @@
 * @Author: detailyang
 * @Date:   2015-08-21 00:12:01
 * @Last Modified by:   detailyang
-* @Last Modified time: 2015-08-23 23:23:27
+* @Last Modified time: 2015-08-26 09:48:43
  */
 
 package hikariansocks5
@@ -101,7 +101,7 @@ func (self *HikarianSocks5) rejectRequests(s *Socks5) (int, error) {
 	   +----+-----+-------+------+----------+----------+
 	*/
 	s.requests[1] = FAILURE
-	return s.sconn.Write(s.requests[:s.requests_size])
+	return s.cconn.Write(s.requests[:s.requests_size])
 }
 
 func (self *HikarianSocks5) replies(s *Socks5) error {
