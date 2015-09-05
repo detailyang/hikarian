@@ -2,7 +2,7 @@
 * @Author: detailyang
 * @Date:   2015-08-16 11:03:47
 * @Last Modified by:   detailyang
-* @Last Modified time: 2015-09-05 14:49:39
+* @Last Modified time: 2015-09-05 17:59:55
  */
 
 package hikarian
@@ -46,6 +46,7 @@ func (self *Hikarian) transport(clientConn *net.TCPConn) {
 		log.Println("connect remote address error:", err)
 		return
 	}
+
 	cipher, err := NewChiper(self.algo, self.secret)
 	if err != nil {
 		log.Fatalf("generate chiper: %s failed %s", self.algo, err.Error())
