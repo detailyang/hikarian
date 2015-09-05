@@ -19,18 +19,23 @@ type HikarianIcmp struct {
 	client, server *net.TCPAddr
 }
 
-func NewHikarianIcmp(sserver string) *HikarianIcmp {
+func NewHikarianIcmp(sclient, sserver string) *HikarianIcmp {
 	server, err := net.ResolveTCPAddr("tcp", sserver)
 	if err != nil {
 		log.Fatal("resolve remote address failed")
 	}
+	client, err := net.ResolveTCPAddr("tcp", sclient)
+	if err != nil {
+		log.Fatal("resolve client address failed")
+	}
 
 	return &HikarianIcmp{
 		server: server,
+		client: client,
 	}
 }
 
-func (self *HikarianIcmp) transport(clientConn *icmp.PacketConn) {
+func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 	for {
 		buf := make([]byte, 1024)
 		numRead, caddr, err := clientConn.ReadFrom(buf)
@@ -108,11 +113,100 @@ func (self *HikarianIcmp) transport(clientConn *icmp.PacketConn) {
 	}
 }
 
-func (self *HikarianIcmp) Run() {
-	clientConn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
-	if err != nil {
-		log.Fatal(err)
+func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
+	rb := make([]byte, 1024)
+	wb := make([]byte, 1024)
+	size := 0
+	for {
+		nr, err := clientConn.Read(rb)
+		if nr > 0 {
+			size += nr
+			wb = append(wb[size:], rb[:nr]...)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Println("read server error: ", err.Error())
+			return
+		}
 	}
-	defer clientConn.Close()
-	self.transport(clientConn)
+
+	laddr := &net.IPAddr{IP: net.ParseIP("0.0.0.0")}
+	raddr, err := net.ResolveIPAddr("ip", os.Args[1])
+	if err != nil {
+		log.Fatalln("parse remote addr error: ", err.Error())
+	}
+
+	serverConn, err := net.DialIP("ip4:icmp", laddr, raddr)
+	if err != nil {
+		log.Fatalln("dial ip failed", err.Error())
+		return
+	}
+	defer serverConn.Close()
+
+	payload, err := (&icmp.Message{
+		Type: ipv4.ICMPTypeEcho, Code: 0,
+		Body: &icmp.Echo{
+			ID: 0, Seq: 0,
+			Data: wb,
+		},
+	}).Marshal(nil)
+	if err != nil {
+		log.Fatalln("marshal echo error: ", err.Error())
+	}
+	log.Println(payload)
+	nw, err := serverConn.Write(payload)
+	if err != nil {
+		log.Fatalln("write echo request error: ", err.Error())
+	}
+	size = 0
+	for {
+		nr, err := serverConn.Read(rb)
+		if nr > 0 {
+			size += nr
+			wb = append(wb[size:], rb[:nr]...)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Println("read server error: ", err.Error())
+			return
+		}
+	}
+
+	nw, err = clientConn.Write(wb)
+	if err != nil {
+		log.Println("write client error: ", err.Error())
+		return
+	}
+
+	log.Println("write size ", nw)
+}
+
+func (self *HikarianIcmp) Run() {
+	if self.mode == "decrypt" {
+		clientConn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer clientConn.Close()
+		self.transportServer(clientConn)
+	} else if self.mode == "encrypt" {
+		l, err := net.ListenTCP("tcp", self.client)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer clientConn.Close()
+		for {
+			clientConn, err := l.AcceptTCP()
+			if err != nil {
+				log.Println("accept error: ", err.Error())
+				continue
+			}
+			defer clientConn.Close()
+			go self.transportClient(clientConn)
+		}
+	}
 }
