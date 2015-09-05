@@ -2,7 +2,7 @@
 * @Author: detailyang
 * @Date:   2015-08-16 11:03:47
 * @Last Modified by:   detailyang
-* @Last Modified time: 2015-08-20 01:09:31
+* @Last Modified time: 2015-09-05 14:49:39
  */
 
 package hikarian
@@ -60,7 +60,6 @@ func (self *Hikarian) transport(clientConn *net.TCPConn) {
 		c = NewConn(clientConn, cipher)
 		s = NewConn(serverConn, nil)
 	} else {
-		log.Println("a")
 		c = NewConn(clientConn, nil)
 		s = NewConn(serverConn, nil)
 	}
