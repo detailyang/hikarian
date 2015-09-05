@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"time"
 )
 
 const (
@@ -43,6 +44,7 @@ func (self *HikarianIcmp) transport(clientConn *icmp.PacketConn) {
 				log.Println("connect remote address error:", err)
 				return
 			}
+			serverConn.SetDeadline(time.Second * 3)
 			defer serverConn.Close()
 
 			request, err := icmp.ParseMessage(ProtocolICMP, buf)
