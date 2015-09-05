@@ -16,22 +16,15 @@ const (
 )
 
 type HikarianIcmp struct {
-	client, server *net.TCPAddr
+	client, server string
+	mode           string
 }
 
-func NewHikarianIcmp(sclient, sserver string) *HikarianIcmp {
-	server, err := net.ResolveTCPAddr("tcp", sserver)
-	if err != nil {
-		log.Fatal("resolve remote address failed")
-	}
-	client, err := net.ResolveTCPAddr("tcp", sclient)
-	if err != nil {
-		log.Fatal("resolve client address failed")
-	}
-
+func NewHikarianIcmp(client, server, mode string) *HikarianIcmp {
 	return &HikarianIcmp{
 		server: server,
 		client: client,
+		mode:   mode,
 	}
 }
 
@@ -44,7 +37,11 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 			continue
 		}
 		go func() {
-			serverConn, err := net.DialTCP("tcp", nil, self.server)
+			server, err := net.ResolveTCPAddr("tcp", self.server)
+			if err != nil {
+				log.Fatalln("resolve server address error: ", err.Error())
+			}
+			serverConn, err := net.DialTCP("tcp", nil, server)
 			if err != nil {
 				log.Println("connect remote address error:", err)
 				return
@@ -130,7 +127,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 	}
 
 	laddr := &net.IPAddr{IP: net.ParseIP("0.0.0.0")}
-	raddr, err := net.ResolveIPAddr("ip", os.Args[1])
+	raddr, err := net.ResolveIPAddr("ip", self.server)
 	if err != nil {
 		log.Fatalln("parse remote addr error: ", err.Error())
 	}
@@ -191,11 +188,15 @@ func (self *HikarianIcmp) Run() {
 		defer clientConn.Close()
 		self.transportServer(clientConn)
 	} else if self.mode == "encrypt" {
-		l, err := net.ListenTCP("tcp", self.client)
+		client, err := net.ResolveTCPAddr("tcp", self.client)
+		if err != nil {
+			log.Fatalln("resolve client address error: ", err.Error())
+		}
+		l, err := net.ListenTCP("tcp", client)
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer clientConn.Close()
+		defer l.Close()
 		for {
 			clientConn, err := l.AcceptTCP()
 			if err != nil {

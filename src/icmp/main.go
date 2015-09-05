@@ -2,7 +2,7 @@
 * @Author: detailyang
 * @Date:   2015-09-05 17:00:56
 * @Last Modified by:   detailyang
-* @Last Modified time: 2015-09-05 21:49:28
+* @Last Modified time: 2015-09-05 21:57:48
  */
 
 package main
@@ -21,6 +21,6 @@ func main() {
 	flag.StringVar(&secret, "secret", "iamyoufather", "encrypt secret")
 	flag.Parse()
 
-	hi := hikarianicmp.NewHikarianIcmp(, client, server)
+	hi := hikarianicmp.NewHikarianIcmp(client, server, mode)
 	hi.Run()
 }
