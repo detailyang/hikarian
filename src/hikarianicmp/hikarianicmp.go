@@ -69,20 +69,20 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 			rb := make([]byte, 1024)
 			wb := make([]byte, 1024)
 			size := 0
-			for {
-				nr, err := serverConn.Read(rb)
-				if nr > 0 {
-					size += nr
-					wb = append(wb[size:], rb[:nr]...)
-				}
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					log.Println("read server error: ", err.Error())
-					return
-				}
+			// for {
+			nr, err := serverConn.Read(rb)
+			if nr > 0 {
+				size += nr
+				wb = append(wb[size:], rb[:nr]...)
 			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Println("read server error: ", err.Error())
+				return
+			}
+			// }
 
 			reply, err := (&icmp.Message{
 				Type: ipv4.ICMPTypeEchoReply,
@@ -111,20 +111,21 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 	rb := make([]byte, 1024)
 	wb := make([]byte, 1024)
 	size := 0
-	for {
-		nr, err := clientConn.Read(rb)
-		if nr > 0 {
-			size += nr
-			wb = append(wb[size:], rb[:nr]...)
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Println("read server error: ", err.Error())
-			return
-		}
+	// for {
+	nr, err := clientConn.Read(rb)
+	if nr > 0 {
+		log.Println(rb[:nr])
+		size += nr
+		wb = append(wb[:size], rb[:nr]...)
 	}
+	if err == io.EOF {
+		break
+	}
+	if err != nil {
+		log.Println("read server error: ", err.Error())
+		return
+	}
+	// }
 
 	laddr := &net.IPAddr{IP: net.ParseIP("0.0.0.0")}
 	raddr, err := net.ResolveIPAddr("ip", self.server)
@@ -149,26 +150,26 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 	if err != nil {
 		log.Fatalln("marshal echo error: ", err.Error())
 	}
-	log.Println(payload)
 	nw, err := serverConn.Write(payload)
 	if err != nil {
 		log.Fatalln("write echo request error: ", err.Error())
 	}
+	log.Println("here")
 	size = 0
-	for {
-		nr, err := serverConn.Read(rb)
-		if nr > 0 {
-			size += nr
-			wb = append(wb[size:], rb[:nr]...)
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Println("read server error: ", err.Error())
-			return
-		}
+	// for {
+	nr, err := serverConn.Read(rb)
+	if nr > 0 {
+		size += nr
+		wb = append(wb[size:], rb[:nr]...)
 	}
+	if err == io.EOF {
+		break
+	}
+	if err != nil {
+		log.Println("read server error: ", err.Error())
+		return
+	}
+	// }
 
 	nw, err = clientConn.Write(wb)
 	if err != nil {
