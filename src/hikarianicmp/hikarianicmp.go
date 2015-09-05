@@ -144,7 +144,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 		Type: ipv4.ICMPTypeEcho, Code: 0,
 		Body: &icmp.Echo{
 			ID: 0, Seq: 0,
-			Data: wb,
+			Data: wb[:size],
 		},
 	}).Marshal(nil)
 	if err != nil {
@@ -154,10 +154,12 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 	if err != nil {
 		log.Fatalln("write echo request error: ", err.Error())
 	}
-	log.Println("here")
 	size = 0
 	// for {
-	nr, err = serverConn.Read(rb)
+	log.Println("here")
+
+	nr, addr, err := serverConn.ReadFrom(rb)
+	log.Println(addr)
 	if nr > 0 {
 		size += nr
 		wb = append(wb[size:], rb[:nr]...)
