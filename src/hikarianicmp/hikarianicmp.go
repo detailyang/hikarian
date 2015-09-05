@@ -76,7 +76,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				wb = append(wb[size:], rb[:nr]...)
 			}
 			if err == io.EOF {
-				break
+				// break
 			}
 			if err != nil {
 				log.Println("read server error: ", err.Error())
@@ -119,7 +119,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 		wb = append(wb[:size], rb[:nr]...)
 	}
 	if err == io.EOF {
-		break
+		// break
 	}
 	if err != nil {
 		log.Println("read server error: ", err.Error())
@@ -157,13 +157,13 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 	log.Println("here")
 	size = 0
 	// for {
-	nr, err := serverConn.Read(rb)
+	nr, err = serverConn.Read(rb)
 	if nr > 0 {
 		size += nr
 		wb = append(wb[size:], rb[:nr]...)
 	}
 	if err == io.EOF {
-		break
+		// break
 	}
 	if err != nil {
 		log.Println("read server error: ", err.Error())
