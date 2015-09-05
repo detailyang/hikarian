@@ -49,7 +49,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				log.Println("connect remote address error:", err)
 				return
 			}
-			serverConn.SetDeadline(time.Second * 3)
+			serverConn.SetDeadline(time.Now().Add(time.Second * 5))
 			defer serverConn.Close()
 
 			request, err := icmp.ParseMessage(ProtocolICMP, buf)
@@ -63,13 +63,10 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				return
 			}
 
-			nw, err := serverConn.Write(body[4 : numRead-4])
+			_, err = serverConn.Write(body[4 : numRead-4])
 			if err != nil {
 				log.Println("write server error: ", err.Error())
 				return
-			}
-			if nw != numRead {
-				log.Println("write error")
 			}
 
 			rb := make([]byte, 1024)
@@ -86,7 +83,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				}
 				if err != nil {
 					log.Println("read server error: ", err.Error())
-					break
+					return
 				}
 			}
 
