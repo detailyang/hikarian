@@ -2,7 +2,7 @@
 * @Author: detailyang
 * @Date:   2015-08-21 00:12:01
 * @Last Modified by:   detailyang
-* @Last Modified time: 2015-08-26 09:48:43
+* @Last Modified time: 2015-09-06 11:40:12
  */
 
 package hikariansocks5
@@ -109,6 +109,7 @@ func (self *HikarianSocks5) replies(s *Socks5) error {
 	port := uint16(80)
 	size := 0
 
+	log.Println("requests type ", s.requests[3])
 	switch s.requests[3] {
 	case IPV4:
 		log.Println("receive IPV4 request")
@@ -164,6 +165,7 @@ func (self *HikarianSocks5) transport(conn net.Conn) {
 	socks5 := NewSocks5(conn)
 	//handshake
 	err := self.handshake(socks5)
+	log.Println("get client handshake ", socks5.handshake)
 	if err != nil && err != io.EOF {
 		log.Println("hankshake failed: ", err)
 		_, err := self.rejectHandshake(socks5)
@@ -181,7 +183,8 @@ func (self *HikarianSocks5) transport(conn net.Conn) {
 
 	//requests
 	err = self.requests(socks5)
-	if err != nil {
+	log.Println("get client requests ", socks5.requests)
+	if err != nil && err != io.EOF {
 		log.Println("requests failed: ", err)
 		_, err := self.rejectRequests(socks5)
 		if err != nil {
