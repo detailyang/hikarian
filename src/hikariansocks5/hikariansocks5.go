@@ -164,7 +164,7 @@ func (self *HikarianSocks5) transport(conn net.Conn) {
 	socks5 := NewSocks5(conn)
 	//handshake
 	err := self.handshake(socks5)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		log.Println("hankshake failed: ", err)
 		_, err := self.rejectHandshake(socks5)
 		if err != nil {
