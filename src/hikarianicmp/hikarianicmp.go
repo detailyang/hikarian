@@ -7,7 +7,8 @@ import (
 	"io"
 	"log"
 	"net"
-	"time"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -18,6 +19,7 @@ const (
 type HikarianIcmp struct {
 	client, server string
 	mode           string
+	pool           *TCPConnPool
 }
 
 func NewHikarianIcmp(client, server, mode string) *HikarianIcmp {
@@ -25,21 +27,11 @@ func NewHikarianIcmp(client, server, mode string) *HikarianIcmp {
 		server: server,
 		client: client,
 		mode:   mode,
+		pool:   NewTCPConnPool(),
 	}
 }
 
 func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
-	server, err := net.ResolveTCPAddr("tcp", self.server)
-	if err != nil {
-		log.Fatalln("resolve server address error: ", err.Error())
-	}
-	serverConn, err := net.DialTCP("tcp", nil, server)
-	if err != nil {
-		log.Println("connect remote address error:", err)
-		return
-	}
-	serverConn.SetDeadline(time.Now().Add(time.Second * 5))
-	defer serverConn.Close()
 	for {
 		buf := make([]byte, 1024)
 		numRead, caddr, err := clientConn.ReadFrom(buf)
@@ -54,10 +46,27 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				log.Println("parse icmp request error: ", err.Error())
 				return
 			}
+
 			body, err := request.Body.Marshal(ProtocolICMP)
 			if err != nil {
 				log.Println("marshal body error: ", err.Error())
 				return
+			}
+			hash := binary.BigEndian.Uint32(body[0:2]) + binary.BigEndian.Uint32(body[2:4])
+			serverConn := self.pool.Get(hash)
+			if serverConn == nil {
+				server, err := net.ResolveTCPAddr("tcp", self.server)
+				if err != nil {
+					log.Fatalln("resolve server address error: ", err.Error())
+				}
+				serverConn, err := net.DialTCP("tcp", nil, server)
+				if err != nil {
+					log.Println("connect remote address error:", err)
+					return
+				}
+				// serverConn.SetDeadline(time.Now().Add(time.Second * 5))
+				defer serverConn.Close()
+				self.pool.Append(hash, serverConn)
 			}
 
 			log.Println("get echo reply body ", body[4:numRead-4])
@@ -109,6 +118,27 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 	rb := make([]byte, 1024)
 	wb := make([]byte, 1024)
+	host, port, err := net.SplitHostPort(clientConn.RemoteAddr().String())
+	if err != nil {
+		log.Fatal("split host port error: ", err.Error())
+		return
+	}
+	ip4 := strings.Split(host, ".")
+	id := 0
+	for index, value := range ip4 {
+		log.Println(index, value)
+		i, err := strconv.Atoi(value)
+		if err != nil {
+			log.Println("strconv ip error: ", err.Error())
+			continue
+		}
+		id += int(uint(i) >> uint(index))
+	}
+	seq, err := strconv.Atoi(port)
+	if err != nil {
+		log.Println("strconv port error: ", err.Error())
+	}
+
 	for {
 		size := 0
 		nr, err := clientConn.Read(rb)
@@ -137,7 +167,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 		payload, err := (&icmp.Message{
 			Type: ipv4.ICMPTypeEcho, Code: 0,
 			Body: &icmp.Echo{
-				ID: 0, Seq: 0,
+				ID: id, Seq: seq,
 				Data: wb[:size],
 			},
 		}).Marshal(nil)
