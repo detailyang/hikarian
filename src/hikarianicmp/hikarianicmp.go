@@ -29,14 +29,6 @@ func NewHikarianIcmp(client, server, mode string) *HikarianIcmp {
 }
 
 func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
-	for {
-		buf := make([]byte, 1024)
-		numRead, caddr, err := clientConn.ReadFrom(buf)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		go func() {
 			server, err := net.ResolveTCPAddr("tcp", self.server)
 			if err != nil {
 				log.Fatalln("resolve server address error: ", err.Error())
@@ -48,6 +40,14 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 			}
 			serverConn.SetDeadline(time.Now().Add(time.Second * 5))
 			defer serverConn.Close()
+	for {
+		buf := make([]byte, 1024)
+		numRead, caddr, err := clientConn.ReadFrom(buf)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		go func() {
 
 			request, err := icmp.ParseMessage(ProtocolICMP, buf)
 			if err != nil {
@@ -60,11 +60,13 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				return
 			}
 
-			_, err = serverConn.Write(body[4 : numRead-4])
+			log.Println("get echo reply body ", body[4: numRead-4])
+			nw, err := serverConn.Write(body[4 : numRead-4])
 			if err != nil {
 				log.Println("write server error: ", err.Error())
 				return
 			}
+			log.Println("get echo reply size ", nw)
 
 			rb := make([]byte, 1024)
 			wb := make([]byte, 1024)
@@ -75,10 +77,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				wb = append(wb[:size], rb[:nr]...)
 				size += nr
 			}
-			if err == io.EOF {
-				// break
-			}
-			if err != nil {
+			if err != nil && err != io.EOF {
 				log.Println("read server error: ", err.Error())
 				return
 			}
@@ -101,7 +100,8 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				log.Println("write echo reply error: ", err.Error())
 				return
 			}
-			log.Println("write echo reply ", numWrite)
+			log.Println("write echo reply body ", wb)
+			log.Println("write echo reply size ", numWrite)
 		}()
 	}
 }
