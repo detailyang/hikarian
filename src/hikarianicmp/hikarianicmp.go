@@ -77,8 +77,8 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 			}
 			log.Println("get echo reply size ", nw)
 
-			rb := make([]byte, 1024)
-			wb := make([]byte, 1024)
+			rb := make([]byte, 10240)
+			wb := make([]byte, 10240)
 			size := 0
 			// for {
 			nr, err := serverConn.Read(rb)
@@ -116,8 +116,9 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 }
 
 func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
-	rb := make([]byte, 1024)
-	wb := make([]byte, 1024)
+	rb := make([]byte, 10240)
+	wb := make([]byte, 10240)
+	body := make([]byte, 10240)
 	host, port, err := net.SplitHostPort(clientConn.RemoteAddr().String())
 	if err != nil {
 		log.Fatal("split host port error: ", err.Error())
@@ -180,7 +181,6 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 			log.Fatalln("write echo request error: ", err.Error())
 		}
 		size = 0
-		body := make([]byte, 1024)
 		for {
 			nr, _, err = serverConn.ReadFrom(rb)
 			if nr > 0 {
