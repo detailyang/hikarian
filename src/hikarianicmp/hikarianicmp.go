@@ -164,6 +164,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 		}
 		defer serverConn.Close()
 
+		log.Printf("get echo request id:%d and seq:%d", id, seq)
 		payload, err := (&icmp.Message{
 			Type: ipv4.ICMPTypeEcho, Code: 0,
 			Body: &icmp.Echo{
@@ -179,30 +180,44 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 			log.Fatalln("write echo request error: ", err.Error())
 		}
 		size = 0
-		nr, _, err = serverConn.ReadFrom(rb)
-		if nr > 0 {
-			wb = append(wb[:size], rb[:nr]...)
-			size += nr
-		}
-		if err != nil {
-			if err != io.EOF {
-				log.Println("read server error: ", err)
+		body := make([]byte, 1024)
+		for {
+			nr, _, err = serverConn.ReadFrom(rb)
+			if nr > 0 {
+				wb = append(wb[:size], rb[:nr]...)
+				size += nr
+			}
+			if err != nil {
+				if err != io.EOF {
+					log.Println("read server error: ", err)
+					return
+				}
+			}
+
+			reply, err := icmp.ParseMessage(ProtocolICMP, rb)
+			if err != nil {
+				log.Println("parse icmp echo reply error: ", err.Error())
 				return
+			}
+			body, err = reply.Body.Marshal(ProtocolICMP)
+			if err != nil {
+				log.Println("marshal icmp echo reply body error: ", err.Error())
+				return
+			}
+
+			log.Printf("get echo reply id:%d and seq:%d",
+				binary.BigEndian.Uint16(body[0:2]),
+				binary.BigEndian.Uint16(body[2:4]))
+			if binary.BigEndian.Uint16(body[0:2]) == uint16(id) &&
+				binary.BigEndian.Uint16(body[2:4]) == uint16(seq) {
+				log.Println("right")
+				break
+			} else {
+				log.Println("receive other")
+				continue
 			}
 		}
 
-		reply, err := icmp.ParseMessage(ProtocolICMP, rb)
-		if err != nil {
-			log.Println("parse icmp echo reply error: ", err.Error())
-			return
-		}
-		body, err := reply.Body.Marshal(ProtocolICMP)
-		if err != nil {
-			log.Println("marshal icmp echo reply body error: ", err.Error())
-			return
-		}
-
-		log.Println("get echo reply body ", body[4:nr-4])
 		nr, err = clientConn.Write(body[4 : nr-4])
 		if err != nil {
 			log.Println("write client error: ", err.Error())
