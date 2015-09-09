@@ -56,20 +56,19 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				log.Println("marshal body error: ", err.Error())
 				return
 			}
-			hash := binary.BigEndian.Uint32(body[0:2]) + binary.BigEndian.Uint32(body[2:4])
+			hash := binary.BigEndian.Uint16(body[0:2]) + binary.BigEndian.Uint16(body[2:4])
 			serverConn := self.pool.Get(hash)
 			if serverConn == nil {
 				server, err := net.ResolveTCPAddr("tcp", self.server)
 				if err != nil {
 					log.Fatalln("resolve server address error: ", err.Error())
 				}
-				serverConn, err := net.DialTCP("tcp", nil, server)
+				serverConn, err = net.DialTCP("tcp", nil, server)
 				if err != nil {
 					log.Println("connect remote address error:", err)
 					return
 				}
 				// serverConn.SetDeadline(time.Now().Add(time.Second * 5))
-				defer serverConn.Close()
 				self.pool.Append(hash, serverConn)
 			}
 

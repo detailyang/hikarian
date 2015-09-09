@@ -10,17 +10,19 @@ package hikarianicmp
 import "net"
 
 type TCPConnPool struct {
-	pool map[uint32]*net.TCPConn
+	pool map[uint16]*net.TCPConn
 }
 
 func NewTCPConnPool() *TCPConnPool {
-	return &TCPConnPool{}
+	return &TCPConnPool{
+		pool: make(map[uint16]*net.TCPConn),
+	}
 }
 
-func (self *TCPConnPool) Get(hash uint32) *net.TCPConn {
+func (self *TCPConnPool) Get(hash uint16) *net.TCPConn {
 	return self.pool[hash]
 }
 
-func (self *TCPConnPool) Append(hash uint32, conn *net.TCPConn) {
+func (self *TCPConnPool) Append(hash uint16, conn *net.TCPConn) {
 	self.pool[hash] = conn
 }
