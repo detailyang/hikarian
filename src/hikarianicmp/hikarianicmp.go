@@ -47,7 +47,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				log.Println("parse icmp request error: ", err.Error())
 				return
 			}
-			if request.code != MagicCode {
+			if request.Code != MagicCode {
 				return
 			}
 
