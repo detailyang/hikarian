@@ -35,9 +35,13 @@ func NewHikarianIcmp(client, server, mode string) *HikarianIcmp {
 func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 	for {
 		buf := make([]byte, 1024)
-		numRead, caddr, err := clientConn.ReadFrom(buf)
+		nr, caddr, err := clientConn.ReadFrom(buf)
 		if err != nil {
 			log.Println(err)
+			continue
+		}
+		if nr == 4 {
+			log.Println("receive empty")
 			continue
 		}
 		go func() {
@@ -72,8 +76,8 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				self.pool.Append(hash, serverConn)
 			}
 
-			log.Println("get echo reply body ", body[4:numRead-4])
-			nw, err := serverConn.Write(body[4 : numRead-4])
+			log.Println("get echo reply body ", body[4:nr-4])
+			nw, err := serverConn.Write(body[4 : nr-4])
 			if err != nil {
 				log.Println("write server error: ", err.Error())
 				return
@@ -200,6 +204,10 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 			reply, err := icmp.ParseMessage(ProtocolICMP, rb)
 			if err != nil {
 				log.Println("parse icmp echo reply error: ", err.Error())
+				return
+			}
+
+			if reply.Code != MagicCode {
 				return
 			}
 			body, err = reply.Body.Marshal(ProtocolICMP)
