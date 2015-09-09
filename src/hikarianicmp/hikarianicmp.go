@@ -14,6 +14,7 @@ import (
 const (
 	ProtocolICMP     = 1
 	ProtocolIPv6ICMP = 58
+	MagicCode        = 55
 )
 
 type HikarianIcmp struct {
@@ -44,6 +45,9 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 			request, err := icmp.ParseMessage(ProtocolICMP, buf)
 			if err != nil {
 				log.Println("parse icmp request error: ", err.Error())
+				return
+			}
+			if request.code != MagicCode {
 				return
 			}
 
@@ -167,7 +171,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 
 		log.Printf("get echo request id:%d and seq:%d", id, seq)
 		payload, err := (&icmp.Message{
-			Type: ipv4.ICMPTypeEcho, Code: 0,
+			Type: ipv4.ICMPTypeEcho, Code: MagicCode,
 			Body: &icmp.Echo{
 				ID: id, Seq: seq,
 				Data: wb[:size],
