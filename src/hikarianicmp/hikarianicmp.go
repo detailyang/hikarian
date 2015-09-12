@@ -15,6 +15,7 @@ const (
 	ProtocolICMP     = 1
 	ProtocolIPv6ICMP = 58
 	MagicCode        = 55
+	AckCode          = 56
 )
 
 type HikarianIcmp struct {
@@ -118,12 +119,29 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 						log.Println("marshal echo reply error: ", err.Error())
 						return
 					}
-					numWrite, err := clientConn.WriteTo(reply, caddr)
-					if err != nil {
-						log.Println("write echo reply error: ", err.Error())
-						return
+					for i := 0; i < 3; i++ {
+						numWrite, err := clientConn.WriteTo(reply, caddr)
+						if err != nil {
+							log.Println("write echo reply error: ", err.Error())
+							return
+						}
+						log.Println("write echo reply body ", wb)
+						log.Println("write echo reply size ", numWrite)
+						buf := make([]byte, 32)
+						nr, _, err = clientConn.ReadFrom(buf)
+						if err != nil {
+							log.Println("read ack error:", err)
+							break
+						}
+						request, err := icmp.ParseMessage(ProtocolICMP, buf)
+						if err != nil {
+							log.Println("parse icmp request error: ", err.Error())
+							return
+						}
+						if request.Code != AckCode {
+							continue
+						}
 					}
-					log.Println("write echo reply body ",len(wb))
 					log.Println("write echo reply size ", numWrite)
 				}
 			}()
@@ -224,6 +242,24 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 			if reply.Code != MagicCode {
 				return
 			}
+			//ack
+			ack, err := (&icmp.Message{
+				Type: ipv4.ICMPTypeEcho, Code: AckCode,
+				Body: &icmp.Echo{
+					ID:   0,
+					Seq:  0,
+					Data: make([]byte, 0),
+				},
+			}).Marshal(nil)
+			if err != nil {
+				log.Fatalln("marshal echo error: ", err.Error())
+			}
+			_, err = serverConn.Write(ack)
+			if err != nil {
+				log.Println("write ack error:", err)
+				return
+			}
+
 			body, err = reply.Body.Marshal(ProtocolICMP)
 			if err != nil {
 				log.Println("marshal icmp echo reply body error: ", err.Error())
