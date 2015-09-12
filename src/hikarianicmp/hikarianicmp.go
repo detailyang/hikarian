@@ -97,6 +97,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					log.Println("marshal echo reply error: ", err.Error())
 					return
 				}
+				ReSend:
 				for i := 0; i < 3; i++ {
 					numWrite, err := clientConn.WriteTo(reply, caddr)
 					if err != nil {
@@ -107,12 +108,14 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 
 					select {
 					case _ = <-icmpChannel:
-						break
+						log.Println("read ack")
+						break ReSend
 					case <-time.After(2 * time.Second):
 						log.Println("timeout")
 						continue
 					}
 				}
+				log.Println("break")
 			}
 		}()
 	}
@@ -288,8 +291,10 @@ func (self *HikarianIcmp) Run() {
 				channel = make(chan []byte)
 				self.ChannelPool.Set(hash, channel)
 				go self.transportServer(clientConn, caddr, channel)
+			} else {
+				log.Println("old channel")
 			}
-			channel <- body[:nr]
+			channel <- body[:nr-4]
 		}
 	} else if self.mode == "encrypt" {
 		client, err := net.ResolveTCPAddr("tcp", self.client)
