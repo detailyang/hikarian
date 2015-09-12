@@ -106,7 +106,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 					if ok == false {
 						return
 					}
-					log.Println("read from channel ",len(wb))
+					log.Println("read from channel ", len(wb))
 					reply, err := (&icmp.Message{
 						Type: ipv4.ICMPTypeEchoReply,
 						Code: request.Code,
@@ -132,6 +132,10 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 						clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 						nr, _, err = clientConn.ReadFrom(buf)
 						if err != nil {
+							if strings.Contains(err.Error(), "i/o timeout") {
+								log.Println("read ack timeout")
+								continue
+							}
 							log.Println("read ack error:", err)
 							break
 						}
@@ -144,7 +148,6 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 							continue
 						}
 					}
-					log.Println("write echo reply size ", numWrite)
 				}
 			}()
 		}()
