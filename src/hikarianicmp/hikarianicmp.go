@@ -218,7 +218,21 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 				return
 			}
 			//ack
-			serverConn.Write(rb[0:8])
+			ack, err := (&icmp.Message{
+				Type: ipv4.ICMPTypeEcho, Code: MagicCode,
+				Body: &icmp.Echo{
+					ID: id, Seq: seq,
+					Data: make([]byte, 0),
+				},
+			}).Marshal(nil)
+			if err != nil {
+				log.Println("marshal ack error:", err)
+			}
+			nw, err := serverConn.Write(ack)
+			if err != nil {
+				log.Println("write ack error", err)
+			}
+			log.Println("write ack size ", nw)
 
 			log.Printf("get echo reply id:%d and seq:%d",
 				binary.BigEndian.Uint16(body[0:2]),
