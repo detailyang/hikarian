@@ -9,6 +9,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -127,6 +128,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 						log.Println("write echo reply body ", wb)
 						log.Println("write echo reply size ", numWrite)
 						buf := make([]byte, 32)
+						clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 						nr, _, err = clientConn.ReadFrom(buf)
 						if err != nil {
 							log.Println("read ack error:", err)
