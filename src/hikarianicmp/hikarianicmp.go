@@ -78,7 +78,6 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 				self.pool.Append(hash, serverConn)
 			}
 
-			log.Println("get echo reply body ", body[4:nr-4])
 			nw, err := serverConn.Write(body[4 : nr-4])
 			if err != nil {
 				log.Println("write server error: ", err.Error())
@@ -96,6 +95,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 						close(readChannel)
 						return
 					}
+					log.Println("read ", nr)
 					readChannel <- rb[:nr]
 				}
 
@@ -106,6 +106,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 					if ok == false {
 						return
 					}
+					log.Println("read from channel ",len(wb))
 					reply, err := (&icmp.Message{
 						Type: ipv4.ICMPTypeEchoReply,
 						Code: request.Code,
@@ -143,6 +144,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 							continue
 						}
 					}
+					log.Println("write echo reply size ", numWrite)
 				}
 			}()
 		}()
