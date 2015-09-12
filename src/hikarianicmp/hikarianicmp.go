@@ -64,6 +64,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 		}
 		log.Println("get echo reply size ", nw)
 		readChannel := make(chan []byte)
+		done := make(chan bool)
 		go func() {
 			rb := make([]byte, 1024)
 			for {
@@ -97,7 +98,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					log.Println("marshal echo reply error: ", err.Error())
 					return
 				}
-				ReSend:
+			ReSend:
 				for i := 0; i < 3; i++ {
 					numWrite, err := clientConn.WriteTo(reply, caddr)
 					if err != nil {
@@ -115,9 +116,10 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 						continue
 					}
 				}
-				log.Println("break")
+				done <- true
 			}
 		}()
+		<-done
 	}
 }
 
