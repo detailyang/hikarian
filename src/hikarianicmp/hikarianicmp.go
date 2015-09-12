@@ -218,6 +218,8 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 				log.Println("marshal icmp echo reply body error: ", err.Error())
 				return
 			}
+			//ack
+			serverConn.Write(rb[0:8])
 
 			log.Printf("get echo reply id:%d and seq:%d",
 				binary.BigEndian.Uint16(body[0:2]),
