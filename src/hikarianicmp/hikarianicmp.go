@@ -129,13 +129,16 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 						log.Println("write echo reply body ", wb)
 						log.Println("write echo reply size ", numWrite)
 						buf := make([]byte, 32)
-						clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-						nr, _, err = clientConn.ReadFrom(buf)
-						if err != nil {
-							if strings.Contains(err.Error(), "i/o timeout") {
-								log.Println("read ack timeout")
-								continue
-							}
+						done := make(chan error)
+						go func() {
+							_, _, err = clientConn.ReadFrom(buf)
+							done <- err
+						}()
+
+						select {
+						case <-time.After(2 * time.Second):
+							continue
+						case err = <-done:
 							log.Println("read ack error:", err)
 							break
 						}
