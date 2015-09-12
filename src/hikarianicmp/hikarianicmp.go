@@ -20,25 +20,27 @@ const (
 )
 
 type HikarianIcmp struct {
-	client, server string
-	mode           string
-	TCPPool        *TCPConnPool
-	ChannelPool    *ChannelPool
+	client, server  string
+	mode            string
+	TCPPool         *TCPConnPool
+	DataChannelPool *ChannelPool
+	AckChannelPool  *ChannelPool
 }
 
 func NewHikarianIcmp(client, server, mode string) *HikarianIcmp {
 	return &HikarianIcmp{
-		server:      server,
-		client:      client,
-		mode:        mode,
-		TCPPool:     NewTCPConnPool(),
-		ChannelPool: NewChannelPool(),
+		server:          server,
+		client:          client,
+		mode:            mode,
+		TCPPool:         NewTCPConnPool(),
+		DataChannelPool: NewChannelPool(),
+		AckChannelPool:  NewChannelPool(),
 	}
 }
 
-func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net.Addr, icmpChannel chan []byte) {
+func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net.Addr, dataChannel, ackChannel chan []byte) {
 	for {
-		body, ok := <-icmpChannel
+		body, ok := <-dataChannel
 		if ok == false {
 			return
 		}
@@ -97,24 +99,24 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					log.Println("marshal echo reply error: ", err.Error())
 					return
 				}
-				// ReSend
-				// for i := 0; i < 3; i++ {
-				numWrite, err := clientConn.WriteTo(reply, caddr)
-				if err != nil {
-					log.Println("write echo reply error: ", err.Error())
-					return
+				ReSend
+				for i := 0; i < 3; i++ {
+					numWrite, err := clientConn.WriteTo(reply, caddr)
+					if err != nil {
+						log.Println("write echo reply error: ", err.Error())
+						return
+					}
+					log.Println("write echo reply size ", numWrite)
+					_ = time.Second
+					select {
+					case _ = <-ackChannel:
+						log.Println("read ack")
+						break ReSend
+					case <-time.After(2 * time.Second):
+						log.Println("timeout")
+						continue
+					}
 				}
-				log.Println("write echo reply size ", numWrite)
-				_ = time.Second
-				// 	select {
-				// 	case _ = <-icmpChannel:
-				// 		log.Println("read ack")
-				// 		break ReSend
-				// 	case <-time.After(2 * time.Second):
-				// 		log.Println("timeout")
-				// 		continue
-				// 	}
-				// }
 			}
 		}()
 	}
@@ -227,21 +229,21 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 				binary.BigEndian.Uint16(body[2:4]) == uint16(seq) {
 				log.Println("right")
 				//ack
-				// ack, err := (&icmp.Message{
-				// 	Type: ipv4.ICMPTypeEcho, Code: MagicCode,
-				// 	Body: &icmp.Echo{
-				// 		ID: id, Seq: seq,
-				// 		Data: make([]byte, 0),
-				// 	},
-				// }).Marshal(nil)
-				// if err != nil {
-				// 	log.Println("marshal ack error:", err)
-				// }
-				// nw, err := serverConn.Write(ack)
-				// if err != nil {
-				// 	log.Println("write ack error", err)
-				// }
-				// log.Println("write ack size ", nw)
+				ack, err := (&icmp.Message{
+					Type: ipv4.ICMPTypeEcho, Code: AckCode,
+					Body: &icmp.Echo{
+						ID: id, Seq: seq,
+						Data: make([]byte, 0),
+					},
+				}).Marshal(nil)
+				if err != nil {
+					log.Println("marshal ack error:", err)
+				}
+				nw, err := serverConn.Write(ack)
+				if err != nil {
+					log.Println("write ack error", err)
+				}
+				log.Println("write ack size ", nw)
 				break
 			} else {
 				log.Println("receive other")
@@ -284,16 +286,22 @@ func (self *HikarianIcmp) Run() {
 				continue
 			}
 			hash := binary.BigEndian.Uint16(body[0:2]) + binary.BigEndian.Uint16(body[2:4])
-			channel := self.ChannelPool.Get(hash)
-			if channel == nil {
-				log.Println("new channel")
-				channel = make(chan []byte)
-				self.ChannelPool.Set(hash, channel)
-				go self.transportServer(clientConn, caddr, channel)
-			} else {
-				log.Println("old channel")
+			dataChannel := self.DataChannelPool.Get(hash)
+			ackChannel := self.AckChannelPool.Get(hash)
+			if dataChannel == nil {
+				dataChannel = make(chan []byte)
+				self.DataChannelPool.Set(hash, dataChannel)
+				go self.transportServer(clientConn, caddr, dataChannel, ackChannel)
 			}
-			channel <- body[:nr-4]
+			if ackChannel == nil {
+				ackChannel = make(chan []byte)
+				self.AckChannelPool.Set(hash, ackChannel)
+			}
+			if request.Code == MagicCode {
+				dataChannel <- body[:nr-4]
+			} else {
+				ackChannel <- body[:nr-4]
+			}
 		}
 	} else if self.mode == "encrypt" {
 		client, err := net.ResolveTCPAddr("tcp", self.client)
