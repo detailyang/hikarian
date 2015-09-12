@@ -28,19 +28,19 @@ func (self *TCPConnPool) Set(hash uint16, conn *net.TCPConn) {
 }
 
 type ChannelPool struct {
-	pool map[uint16]*chan []byte
+	pool map[uint16]chan []byte
 }
 
 func NewChannelPool() *ChannelPool {
 	return &ChannelPool{
-		pool: make(map[uint16]*chan []byte),
+		pool: make(map[uint16]chan []byte),
 	}
 }
 
-func (self *ChannelPool) Get(hash uint16) *chan []byte {
+func (self *ChannelPool) Get(hash uint16) chan []byte {
 	return self.pool[hash]
 }
 
-func (self *ChannelPool) Set(hash uint16, channel *chan []byte) {
+func (self *ChannelPool) Set(hash uint16, channel chan []byte) {
 	self.pool[hash] = channel
 }

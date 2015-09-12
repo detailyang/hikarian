@@ -103,7 +103,6 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 						log.Println("write echo reply error: ", err.Error())
 						return
 					}
-					log.Println("write echo reply body ", wb)
 					log.Println("write echo reply size ", numWrite)
 
 					select {
@@ -253,7 +252,7 @@ func (self *HikarianIcmp) Run() {
 		defer clientConn.Close()
 		for {
 			buf := make([]byte, 1024)
-			_, caddr, err := clientConn.ReadFrom(buf)
+			nr, caddr, err := clientConn.ReadFrom(buf)
 			request, err := icmp.ParseMessage(ProtocolICMP, buf)
 			if err != nil {
 				log.Println("parse icmp request error: ", err.Error())
@@ -271,12 +270,12 @@ func (self *HikarianIcmp) Run() {
 			hash := binary.BigEndian.Uint16(body[0:2]) + binary.BigEndian.Uint16(body[2:4])
 			channel := self.ChannelPool.Get(hash)
 			if channel == nil {
-				channel := make(chan []byte)
-				self.ChannelPool.Set(hash, &channel)
+				log.Println("new channel")
+				channel = make(chan []byte)
+				self.ChannelPool.Set(hash, channel)
 				go self.transportServer(clientConn, caddr, channel)
-			} else {
-				*channel <- body
 			}
+			channel <- body[:nr]
 		}
 	} else if self.mode == "encrypt" {
 		client, err := net.ResolveTCPAddr("tcp", self.client)
