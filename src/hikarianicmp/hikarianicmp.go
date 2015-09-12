@@ -99,7 +99,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					log.Println("marshal echo reply error: ", err.Error())
 					return
 				}
-				ReSend
+				ReSend:
 				for i := 0; i < 3; i++ {
 					numWrite, err := clientConn.WriteTo(reply, caddr)
 					if err != nil {
@@ -107,10 +107,9 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 						return
 					}
 					log.Println("write echo reply size ", numWrite)
-					_ = time.Second
 					select {
-					case _ = <-ackChannel:
-						log.Println("read ack")
+					case body := <-ackChannel:
+						log.Println("read ack ", body)
 						break ReSend
 					case <-time.After(2 * time.Second):
 						log.Println("timeout")
@@ -291,15 +290,17 @@ func (self *HikarianIcmp) Run() {
 			if dataChannel == nil {
 				dataChannel = make(chan []byte)
 				self.DataChannelPool.Set(hash, dataChannel)
-				go self.transportServer(clientConn, caddr, dataChannel, ackChannel)
-			}
 			if ackChannel == nil {
 				ackChannel = make(chan []byte)
 				self.AckChannelPool.Set(hash, ackChannel)
 			}
+				go self.transportServer(clientConn, caddr, dataChannel, ackChannel)
+			}
 			if request.Code == MagicCode {
+				log.Println("receive magic")
 				dataChannel <- body[:nr-4]
 			} else {
+				log.Println("receive ack")
 				ackChannel <- body[:nr-4]
 			}
 		}
