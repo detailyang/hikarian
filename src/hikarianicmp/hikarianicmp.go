@@ -47,7 +47,6 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 			continue
 		}
 		go func() {
-
 			request, err := icmp.ParseMessage(ProtocolICMP, buf)
 			if err != nil {
 				log.Println("parse icmp request error: ", err.Error())
@@ -120,37 +119,13 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn) {
 						log.Println("marshal echo reply error: ", err.Error())
 						return
 					}
-					for i := 0; i < 3; i++ {
-						numWrite, err := clientConn.WriteTo(reply, caddr)
-						if err != nil {
-							log.Println("write echo reply error: ", err.Error())
-							return
-						}
-						log.Println("write echo reply body ", wb)
-						log.Println("write echo reply size ", numWrite)
-						buf := make([]byte, 32)
-						done := make(chan error)
-						go func() {
-							_, _, err = clientConn.ReadFrom(buf)
-							done <- err
-						}()
-
-						select {
-						case <-time.After(2 * time.Second):
-							continue
-						case err = <-done:
-							log.Println("read ack error:", err)
-							break
-						}
-						request, err := icmp.ParseMessage(ProtocolICMP, buf)
-						if err != nil {
-							log.Println("parse icmp request error: ", err.Error())
-							return
-						}
-						if request.Code != AckCode {
-							continue
-						}
+					numWrite, err := clientConn.WriteTo(reply, caddr)
+					if err != nil {
+						log.Println("write echo reply error: ", err.Error())
+						return
 					}
+					log.Println("write echo reply body ", wb)
+					log.Println("write echo reply size ", numWrite)
 				}
 			}()
 		}()
@@ -248,23 +223,6 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 			}
 
 			if reply.Code != MagicCode {
-				return
-			}
-			//ack
-			ack, err := (&icmp.Message{
-				Type: ipv4.ICMPTypeEcho, Code: AckCode,
-				Body: &icmp.Echo{
-					ID:   0,
-					Seq:  0,
-					Data: make([]byte, 0),
-				},
-			}).Marshal(nil)
-			if err != nil {
-				log.Fatalln("marshal echo error: ", err.Error())
-			}
-			_, err = serverConn.Write(ack)
-			if err != nil {
-				log.Println("write ack error:", err)
 				return
 			}
 
