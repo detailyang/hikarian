@@ -64,7 +64,6 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 		}
 		log.Println("get echo reply size ", nw)
 		readChannel := make(chan []byte)
-		done := make(chan bool)
 		go func() {
 			rb := make([]byte, 1024)
 			for {
@@ -78,48 +77,44 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 				readChannel <- rb[:nr]
 			}
 		}()
-		go func() {
-			for {
-				wb, ok := <-readChannel
-				if ok == false {
-					return
-				}
-				log.Println("read from channel ", len(wb))
-				reply, err := (&icmp.Message{
-					Type: ipv4.ICMPTypeEchoReply,
-					Code: MagicCode,
-					Body: &icmp.Echo{
-						ID:   int(binary.BigEndian.Uint16((body[0:2]))),
-						Seq:  int(binary.BigEndian.Uint16((body[2:4]))),
-						Data: wb,
-					},
-				}).Marshal(nil)
-				if err != nil {
-					log.Println("marshal echo reply error: ", err.Error())
-					return
-				}
-			ReSend:
-				for i := 0; i < 3; i++ {
-					numWrite, err := clientConn.WriteTo(reply, caddr)
-					if err != nil {
-						log.Println("write echo reply error: ", err.Error())
-						return
-					}
-					log.Println("write echo reply size ", numWrite)
-
-					select {
-					case _ = <-icmpChannel:
-						log.Println("read ack")
-						break ReSend
-					case <-time.After(2 * time.Second):
-						log.Println("timeout")
-						continue
-					}
-				}
-				done <- true
+		for {
+			wb, ok := <-readChannel
+			if ok == false {
+				return
 			}
-		}()
-		<-done
+			log.Println("read from channel ", len(wb))
+			reply, err := (&icmp.Message{
+				Type: ipv4.ICMPTypeEchoReply,
+				Code: MagicCode,
+				Body: &icmp.Echo{
+					ID:   int(binary.BigEndian.Uint16((body[0:2]))),
+					Seq:  int(binary.BigEndian.Uint16((body[2:4]))),
+					Data: wb,
+				},
+			}).Marshal(nil)
+			if err != nil {
+				log.Println("marshal echo reply error: ", err.Error())
+				return
+			}
+		ReSend:
+			for i := 0; i < 3; i++ {
+				numWrite, err := clientConn.WriteTo(reply, caddr)
+				if err != nil {
+					log.Println("write echo reply error: ", err.Error())
+					return
+				}
+				log.Println("write echo reply size ", numWrite)
+
+				select {
+				case _ = <-icmpChannel:
+					log.Println("read ack")
+					break ReSend
+				case <-time.After(2 * time.Second):
+					log.Println("timeout")
+					continue
+				}
+			}
+		}
 	}
 }
 
