@@ -77,44 +77,46 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 				readChannel <- rb[:nr]
 			}
 		}()
-		for {
-			wb, ok := <-readChannel
-			if ok == false {
-				return
-			}
-			log.Println("read from channel ", len(wb))
-			reply, err := (&icmp.Message{
-				Type: ipv4.ICMPTypeEchoReply,
-				Code: MagicCode,
-				Body: &icmp.Echo{
-					ID:   int(binary.BigEndian.Uint16((body[0:2]))),
-					Seq:  int(binary.BigEndian.Uint16((body[2:4]))),
-					Data: wb,
-				},
-			}).Marshal(nil)
-			if err != nil {
-				log.Println("marshal echo reply error: ", err.Error())
-				return
-			}
-		ReSend:
-			for i := 0; i < 3; i++ {
+		go func() {
+			for {
+				wb, ok := <-readChannel
+				if ok == false {
+					return
+				}
+				log.Println("read from channel ", len(wb))
+				reply, err := (&icmp.Message{
+					Type: ipv4.ICMPTypeEchoReply,
+					Code: MagicCode,
+					Body: &icmp.Echo{
+						ID:   int(binary.BigEndian.Uint16((body[0:2]))),
+						Seq:  int(binary.BigEndian.Uint16((body[2:4]))),
+						Data: wb,
+					},
+				}).Marshal(nil)
+				if err != nil {
+					log.Println("marshal echo reply error: ", err.Error())
+					return
+				}
+				// ReSend
+				// for i := 0; i < 3; i++ {
 				numWrite, err := clientConn.WriteTo(reply, caddr)
 				if err != nil {
 					log.Println("write echo reply error: ", err.Error())
 					return
 				}
 				log.Println("write echo reply size ", numWrite)
-
-				select {
-				case _ = <-icmpChannel:
-					log.Println("read ack")
-					break ReSend
-				case <-time.After(2 * time.Second):
-					log.Println("timeout")
-					continue
-				}
+				_ = time.Second
+				// 	select {
+				// 	case _ = <-icmpChannel:
+				// 		log.Println("read ack")
+				// 		break ReSend
+				// 	case <-time.After(2 * time.Second):
+				// 		log.Println("timeout")
+				// 		continue
+				// 	}
+				// }
 			}
-		}
+		}()
 	}
 }
 
@@ -225,21 +227,21 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 				binary.BigEndian.Uint16(body[2:4]) == uint16(seq) {
 				log.Println("right")
 				//ack
-				ack, err := (&icmp.Message{
-					Type: ipv4.ICMPTypeEcho, Code: MagicCode,
-					Body: &icmp.Echo{
-						ID: id, Seq: seq,
-						Data: make([]byte, 0),
-					},
-				}).Marshal(nil)
-				if err != nil {
-					log.Println("marshal ack error:", err)
-				}
-				nw, err := serverConn.Write(ack)
-				if err != nil {
-					log.Println("write ack error", err)
-				}
-				log.Println("write ack size ", nw)
+				// ack, err := (&icmp.Message{
+				// 	Type: ipv4.ICMPTypeEcho, Code: MagicCode,
+				// 	Body: &icmp.Echo{
+				// 		ID: id, Seq: seq,
+				// 		Data: make([]byte, 0),
+				// 	},
+				// }).Marshal(nil)
+				// if err != nil {
+				// 	log.Println("marshal ack error:", err)
+				// }
+				// nw, err := serverConn.Write(ack)
+				// if err != nil {
+				// 	log.Println("write ack error", err)
+				// }
+				// log.Println("write ack size ", nw)
 				break
 			} else {
 				log.Println("receive other")
