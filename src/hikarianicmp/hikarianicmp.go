@@ -9,6 +9,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -96,13 +97,23 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					log.Println("marshal echo reply error: ", err.Error())
 					return
 				}
-				numWrite, err := clientConn.WriteTo(reply, caddr)
-				if err != nil {
-					log.Println("write echo reply error: ", err.Error())
-					return
+				for i := 0; i < 3; i++ {
+					numWrite, err := clientConn.WriteTo(reply, caddr)
+					if err != nil {
+						log.Println("write echo reply error: ", err.Error())
+						return
+					}
+					log.Println("write echo reply body ", wb)
+					log.Println("write echo reply size ", numWrite)
+
+					select {
+					case _ = <-icmpChannel:
+						break
+					case <-time.After(2 * time.Second):
+						log.Println("timeout")
+						continue
+					}
 				}
-				log.Println("write echo reply body ", wb)
-				log.Println("write echo reply size ", numWrite)
 			}
 		}()
 	}
