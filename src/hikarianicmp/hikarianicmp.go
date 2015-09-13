@@ -99,7 +99,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					log.Println("marshal echo reply error: ", err.Error())
 					return
 				}
-				ReSend:
+			ReSend:
 				for i := 0; i < 3; i++ {
 					numWrite, err := clientConn.WriteTo(reply, caddr)
 					if err != nil {
@@ -189,73 +189,84 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 		if err != nil {
 			log.Fatalln("write echo request error: ", err.Error())
 		}
-		size = 0
-		for {
-			log.Println("wait client data")
-			nr, _, err = serverConn.ReadFrom(rb)
-			log.Println("get client data")
-			if nr > 0 {
-				wb = append(wb[:size], rb[:nr]...)
-				size += nr
+		readChannel := make(chan []byte)
+		go func() {
+			for {
+				log.Println("wait client data")
+				size = 0
+				nr, _, err = serverConn.ReadFrom(rb)
+				if nr > 0 {
+					wb = append(wb[:size], rb[:nr]...)
+					size += nr
+				}
+				if err != nil {
+					if err != io.EOF {
+						log.Println("read server error: ", err)
+						break
+					}
+				}
+
+				reply, err := icmp.ParseMessage(ProtocolICMP, rb)
+				if err != nil {
+					log.Println("parse icmp echo reply error: ", err.Error())
+					break
+				}
+
+				if reply.Code != MagicCode {
+					break
+				}
+
+				body, err = reply.Body.Marshal(ProtocolICMP)
+				if err != nil {
+					log.Println("marshal icmp echo reply body error: ", err.Error())
+					break
+				}
+
+				log.Printf("get echo reply id:%d and seq:%d",
+					binary.BigEndian.Uint16(body[0:2]),
+					binary.BigEndian.Uint16(body[2:4]))
+				if binary.BigEndian.Uint16(body[0:2]) == uint16(id) &&
+					binary.BigEndian.Uint16(body[2:4]) == uint16(seq) {
+					log.Println("right")
+					//ack
+					ack, err := (&icmp.Message{
+						Type: ipv4.ICMPTypeEcho, Code: AckCode,
+						Body: &icmp.Echo{
+							ID: id, Seq: seq,
+							Data: make([]byte, 0),
+						},
+					}).Marshal(nil)
+					if err != nil {
+						log.Println("marshal ack error:", err)
+					}
+					nw, err := serverConn.Write(ack)
+					if err != nil {
+						log.Println("write ack error", err)
+					}
+					log.Println("write ack size ", nw)
+					readChannel <- body[4 : nr-4]
+				} else {
+					log.Println("receive other")
+					continue
+				}
 			}
-			if err != nil {
-				if err != io.EOF {
-					log.Println("read server error: ", err)
+			close(readChannel)
+		}()
+
+		go func() {
+			for {
+				body, ok := <-readChannel
+				if ok == false {
 					return
 				}
-			}
-
-			reply, err := icmp.ParseMessage(ProtocolICMP, rb)
-			if err != nil {
-				log.Println("parse icmp echo reply error: ", err.Error())
-				return
-			}
-
-			if reply.Code != MagicCode {
-				return
-			}
-
-			body, err = reply.Body.Marshal(ProtocolICMP)
-			if err != nil {
-				log.Println("marshal icmp echo reply body error: ", err.Error())
-				return
-			}
-
-			log.Printf("get echo reply id:%d and seq:%d",
-				binary.BigEndian.Uint16(body[0:2]),
-				binary.BigEndian.Uint16(body[2:4]))
-			if binary.BigEndian.Uint16(body[0:2]) == uint16(id) &&
-				binary.BigEndian.Uint16(body[2:4]) == uint16(seq) {
-				log.Println("right")
-				//ack
-				ack, err := (&icmp.Message{
-					Type: ipv4.ICMPTypeEcho, Code: AckCode,
-					Body: &icmp.Echo{
-						ID: id, Seq: seq,
-						Data: make([]byte, 0),
-					},
-				}).Marshal(nil)
+				nr, err = clientConn.Write(body)
 				if err != nil {
-					log.Println("marshal ack error:", err)
+					log.Println("write client error: ", err.Error())
+					return
 				}
-				nw, err := serverConn.Write(ack)
-				if err != nil {
-					log.Println("write ack error", err)
-				}
-				log.Println("write ack size ", nw)
-				break
-			} else {
-				log.Println("receive other")
-				continue
+				log.Println("get echo reply size ", nr)
 			}
-		}
-
-		nr, err = clientConn.Write(body[4 : nr-4])
-		if err != nil {
-			log.Println("write client error: ", err.Error())
-			return
-		}
-		log.Println("get echo reply size ", nr)
+		}()
 	}
 
 }
@@ -290,16 +301,16 @@ func (self *HikarianIcmp) Run() {
 			if dataChannel == nil {
 				dataChannel = make(chan []byte)
 				self.DataChannelPool.Set(hash, dataChannel)
-			if ackChannel == nil {
-				ackChannel = make(chan []byte)
-				self.AckChannelPool.Set(hash, ackChannel)
-			}
+				if ackChannel == nil {
+					ackChannel = make(chan []byte)
+					self.AckChannelPool.Set(hash, ackChannel)
+				}
 				go self.transportServer(clientConn, caddr, dataChannel, ackChannel)
 			}
 			if request.Code == MagicCode {
 				log.Println("receive magic")
 				dataChannel <- body[:nr-4]
-			} else {
+			} else if request.Code == AckCode {
 				log.Println("receive ack")
 				ackChannel <- body[:nr-4]
 			}
