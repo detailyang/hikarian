@@ -99,23 +99,23 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					log.Println("marshal echo reply error: ", err.Error())
 					return
 				}
-			ReSend:
-				for i := 0; i < 3; i++ {
-					numWrite, err := clientConn.WriteTo(reply, caddr)
-					if err != nil {
-						log.Println("write echo reply error: ", err.Error())
-						return
-					}
-					log.Println("write echo reply size ", numWrite)
-					select {
-					case body := <-ackChannel:
-						log.Println("read ack ", body)
-						break ReSend
-					case <-time.After(2 * time.Second):
-						log.Println("timeout")
-						continue
-					}
+				// ReSend:
+				// 	for i := 0; i < 3; i++ {
+				numWrite, err := clientConn.WriteTo(reply, caddr)
+				if err != nil {
+					log.Println("write echo reply error: ", err.Error())
+					return
 				}
+				log.Println("write echo reply size ", numWrite)
+				// 	select {
+				// 	case body := <-ackChannel:
+				// 		log.Println("read ack ", body)
+				// 		break ReSend
+				// 	case <-time.After(2 * time.Second):
+				// 		log.Println("timeout")
+				// 		continue
+				// 	}
+				// }
 			}
 		}()
 	}
@@ -229,21 +229,21 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 					binary.BigEndian.Uint16(body[2:4]) == uint16(seq) {
 					log.Println("right")
 					//ack
-					ack, err := (&icmp.Message{
-						Type: ipv4.ICMPTypeEcho, Code: AckCode,
-						Body: &icmp.Echo{
-							ID: id, Seq: seq,
-							Data: make([]byte, 0),
-						},
-					}).Marshal(nil)
-					if err != nil {
-						log.Println("marshal ack error:", err)
-					}
-					nw, err := serverConn.Write(ack)
-					if err != nil {
-						log.Println("write ack error", err)
-					}
-					log.Println("write ack size ", nw)
+					// ack, err := (&icmp.Message{
+					// 	Type: ipv4.ICMPTypeEcho, Code: AckCode,
+					// 	Body: &icmp.Echo{
+					// 		ID: id, Seq: seq,
+					// 		Data: make([]byte, 0),
+					// 	},
+					// }).Marshal(nil)
+					// if err != nil {
+					// 	log.Println("marshal ack error:", err)
+					// }
+					// nw, err := serverConn.Write(ack)
+					// if err != nil {
+					// 	log.Println("write ack error", err)
+					// }
+					// log.Println("write ack size ", nw)
 					readChannel <- body[4 : nr-4]
 				} else {
 					log.Println("receive other")
