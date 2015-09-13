@@ -73,6 +73,9 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					close(readChannel)
 					return
 				}
+				if nr == 0 {
+					continue
+				}
 				log.Println("read ", nr)
 				readChannel <- rb[:nr]
 			}
@@ -97,23 +100,12 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 					log.Println("marshal echo reply error: ", err.Error())
 					return
 				}
-				// ReSend:
-				// 	for i := 0; i < 3; i++ {
 				numWrite, err := clientConn.WriteTo(reply, caddr)
 				if err != nil {
 					log.Println("write echo reply error: ", err.Error())
 					return
 				}
 				log.Println("write echo reply size ", numWrite)
-				// 	select {
-				// 	case body := <-ackChannel:
-				// 		log.Println("read ack ", body)
-				// 		break ReSend
-				// 	case <-time.After(2 * time.Second):
-				// 		log.Println("timeout")
-				// 		continue
-				// 	}
-				// }
 			}
 		}()
 	}
@@ -142,14 +134,89 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 		log.Println("strconv port error: ", err.Error())
 	}
 
+	//server
+	laddr := &net.IPAddr{IP: net.ParseIP("0.0.0.0")}
+	raddr, err := net.ResolveIPAddr("ip", self.server)
+	if err != nil {
+		log.Fatalln("parse remote addr error: ", err.Error())
+	}
+
+	serverConn, err := net.DialIP("ip4:icmp", laddr, raddr)
+	if err != nil {
+		log.Fatalln("dial ip failed", err.Error())
+		return
+	}
+	// defer serverConn.Close()
+	readChannel := make(chan []byte)
+	go func() {
+		for {
+			rb := make([]byte, 1024)
+			log.Println("wait client data")
+			nr, _, err := serverConn.ReadFrom(rb)
+			log.Println("get client data size ", nr)
+			if err != nil {
+				if err != io.EOF {
+					log.Println("read server error: ", err)
+					break
+				}
+			}
+
+			reply, err := icmp.ParseMessage(ProtocolICMP, rb)
+			if err != nil {
+				log.Println("parse icmp echo reply error: ", err.Error())
+				break
+			}
+
+			if reply.Code != MagicCode {
+				break
+			}
+
+			body, err := reply.Body.Marshal(ProtocolICMP)
+			if err != nil {
+				log.Println("marshal icmp echo reply body error: ", err.Error())
+				break
+			}
+
+			log.Printf("get echo reply id:%d and seq:%d",
+				binary.BigEndian.Uint16(body[0:2]),
+				binary.BigEndian.Uint16(body[2:4]))
+			if binary.BigEndian.Uint16(body[0:2]) == uint16(id) &&
+				binary.BigEndian.Uint16(body[2:4]) == uint16(seq) {
+				log.Println("right")
+				readChannel <- body[4 : nr-4]
+				// break
+			} else {
+				log.Println("receive other")
+				continue
+			}
+		}
+		// close(readChannel)
+	}()
+
+	go func() {
+		for {
+			body, ok := <-readChannel
+			if ok == false {
+				return
+			}
+			nr, err := clientConn.Write(body)
+			if err != nil {
+				log.Println("write client error: ", err.Error())
+				return
+			}
+			log.Println("get echo reply size ", nr)
+		}
+	}()
 	for {
 		size := 0
 		rb := make([]byte, 1024)
+		log.Println("wait client")
 		nr, err := clientConn.Read(rb)
+		log.Println("get client data ", rb[:nr])
+		log.Println("get client data size ", nr)
 		if nr == 0 {
 			return
 		}
-		log.Println("get client data ", rb[:nr])
 		if nr > 0 {
 			wb = append(wb[:size], rb[:nr]...)
 			size += nr
@@ -158,18 +225,6 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 			log.Println("read server error: ", err.Error())
 			return
 		}
-		laddr := &net.IPAddr{IP: net.ParseIP("0.0.0.0")}
-		raddr, err := net.ResolveIPAddr("ip", self.server)
-		if err != nil {
-			log.Fatalln("parse remote addr error: ", err.Error())
-		}
-
-		serverConn, err := net.DialIP("ip4:icmp", laddr, raddr)
-		if err != nil {
-			log.Fatalln("dial ip failed", err.Error())
-			return
-		}
-		defer serverConn.Close()
 
 		log.Printf("set echo request id:%d and seq:%d", id, seq)
 		payload, err := (&icmp.Message{
@@ -182,87 +237,11 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 		if err != nil {
 			log.Fatalln("marshal echo error: ", err.Error())
 		}
-		_, err = serverConn.Write(payload)
+		nw, err := serverConn.Write(payload)
 		if err != nil {
 			log.Fatalln("write echo request error: ", err.Error())
 		}
-		readChannel := make(chan []byte)
-		go func() {
-			for {
-				rb := make([]byte, 1024)
-				log.Println("wait client data")
-				size = 0
-				nr, _, err = serverConn.ReadFrom(rb)
-				log.Println("get client data size ", nr)
-				if err != nil {
-					if err != io.EOF {
-						log.Println("read server error: ", err)
-						break
-					}
-				}
-
-				reply, err := icmp.ParseMessage(ProtocolICMP, rb)
-				if err != nil {
-					log.Println("parse icmp echo reply error: ", err.Error())
-					break
-				}
-
-				if reply.Code != MagicCode {
-					break
-				}
-
-				body, err := reply.Body.Marshal(ProtocolICMP)
-				if err != nil {
-					log.Println("marshal icmp echo reply body error: ", err.Error())
-					break
-				}
-
-				log.Printf("get echo reply id:%d and seq:%d",
-					binary.BigEndian.Uint16(body[0:2]),
-					binary.BigEndian.Uint16(body[2:4]))
-				if binary.BigEndian.Uint16(body[0:2]) == uint16(id) &&
-					binary.BigEndian.Uint16(body[2:4]) == uint16(seq) {
-					log.Println("right")
-					//ack
-					// ack, err := (&icmp.Message{
-					// 	Type: ipv4.ICMPTypeEcho, Code: AckCode,
-					// 	Body: &icmp.Echo{
-					// 		ID: id, Seq: seq,
-					// 		Data: make([]byte, 0),
-					// 	},
-					// }).Marshal(nil)
-					// if err != nil {
-					// 	log.Println("marshal ack error:", err)
-					// }
-					// nw, err := serverConn.Write(ack)
-					// if err != nil {
-					// 	log.Println("write ack error", err)
-					// }
-					// log.Println("write ack size ", nw)
-					readChannel <- body[4 : nr-4]
-					// break
-				} else {
-					log.Println("receive other")
-					continue
-				}
-			}
-			close(readChannel)
-		}()
-
-		go func() {
-			for {
-				body, ok := <-readChannel
-				if ok == false {
-					return
-				}
-				nr, err = clientConn.Write(body)
-				if err != nil {
-					log.Println("write client error: ", err.Error())
-					return
-				}
-				log.Println("get echo reply size ", nr)
-			}
-		}()
+		log.Println("write server ", nw)
 	}
 
 }
