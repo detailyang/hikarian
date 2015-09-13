@@ -190,7 +190,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 				continue
 			}
 		}
-		// close(readChannel)
+		close(readChannel)
 	}()
 
 	go func() {
@@ -207,43 +207,48 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 			log.Println("get echo reply size ", nr)
 		}
 	}()
-	for {
-		size := 0
-		rb := make([]byte, 1024)
-		log.Println("wait client")
-		nr, err := clientConn.Read(rb)
-		log.Println("get client data ", rb[:nr])
-		log.Println("get client data size ", nr)
-		if nr == 0 {
-			return
-		}
-		if nr > 0 {
-			wb = append(wb[:size], rb[:nr]...)
-			size += nr
-		}
-		if err != nil && err != io.EOF {
-			log.Println("read server error: ", err.Error())
-			return
-		}
+	done := make(chan bool)
+	go func() {
+		for {
+			size := 0
+			rb := make([]byte, 1024)
+			log.Println("wait client")
+			nr, err := clientConn.Read(rb)
+			log.Println("get client data size ", nr)
+			if err != nil {
+				if err != io.EOF {
+					log.Println("read server error: ", err.Error())
+					break
+				} else {
+					log.Println("EOF")
+					break
+				}
+			}
+			if nr > 0 {
+				wb = append(wb[:size], rb[:nr]...)
+				size += nr
+			}
 
-		log.Printf("set echo request id:%d and seq:%d", id, seq)
-		payload, err := (&icmp.Message{
-			Type: ipv4.ICMPTypeEcho, Code: MagicCode,
-			Body: &icmp.Echo{
-				ID: id, Seq: seq,
-				Data: wb[:size],
-			},
-		}).Marshal(nil)
-		if err != nil {
-			log.Fatalln("marshal echo error: ", err.Error())
+			log.Printf("set echo request id:%d and seq:%d", id, seq)
+			payload, err := (&icmp.Message{
+				Type: ipv4.ICMPTypeEcho, Code: MagicCode,
+				Body: &icmp.Echo{
+					ID: id, Seq: seq,
+					Data: wb[:size],
+				},
+			}).Marshal(nil)
+			if err != nil {
+				log.Fatalln("marshal echo error: ", err.Error())
+			}
+			nw, err := serverConn.Write(payload)
+			if err != nil {
+				log.Fatalln("write echo request error: ", err.Error())
+			}
+			log.Println("write server ", nw)
 		}
-		nw, err := serverConn.Write(payload)
-		if err != nil {
-			log.Fatalln("write echo request error: ", err.Error())
-		}
-		log.Println("write server ", nw)
-	}
-
+		done <- true
+	}()
+	<-done
 }
 
 func (self *HikarianIcmp) Run() {
