@@ -24,7 +24,6 @@ type HikarianIcmp struct {
 	mode            string
 	TCPPool         *TCPConnPool
 	DataChannelPool *ChannelPool
-	AckChannelPool  *ChannelPool
 }
 
 func NewHikarianIcmp(client, server, mode string) *HikarianIcmp {
@@ -34,11 +33,10 @@ func NewHikarianIcmp(client, server, mode string) *HikarianIcmp {
 		mode:            mode,
 		TCPPool:         NewTCPConnPool(),
 		DataChannelPool: NewChannelPool(),
-		AckChannelPool:  NewChannelPool(),
 	}
 }
 
-func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net.Addr, dataChannel, ackChannel chan []byte) {
+func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net.Addr, dataChannel chan []byte) {
 	for {
 		body, ok := <-dataChannel
 		if ok == false {
@@ -295,22 +293,14 @@ func (self *HikarianIcmp) Run() {
 			}
 			hash := binary.BigEndian.Uint16(body[0:2]) + binary.BigEndian.Uint16(body[2:4])
 			dataChannel := self.DataChannelPool.Get(hash)
-			ackChannel := self.AckChannelPool.Get(hash)
 			if dataChannel == nil {
 				dataChannel = make(chan []byte)
 				self.DataChannelPool.Set(hash, dataChannel)
-				if ackChannel == nil {
-					ackChannel = make(chan []byte)
-					self.AckChannelPool.Set(hash, ackChannel)
-				}
-				go self.transportServer(clientConn, caddr, dataChannel, ackChannel)
+				go self.transportServer(clientConn, caddr, dataChannel)
 			}
 			if request.Code == MagicCode {
 				log.Println("receive magic")
 				dataChannel <- body[:nr-4]
-			} else if request.Code == AckCode {
-				log.Println("receive ack")
-				ackChannel <- body[:nr-4]
 			}
 		}
 	} else if self.mode == "encrypt" {
