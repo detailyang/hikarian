@@ -9,7 +9,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"time"
+	_ "time"
 )
 
 const (
@@ -122,9 +122,7 @@ func (self *HikarianIcmp) transportServer(clientConn *icmp.PacketConn, caddr net
 }
 
 func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
-	rb := make([]byte, 10240)
 	wb := make([]byte, 10240)
-	body := make([]byte, 10240)
 	host, port, err := net.SplitHostPort(clientConn.RemoteAddr().String())
 	if err != nil {
 		log.Fatal("split host port error: ", err.Error())
@@ -148,6 +146,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 
 	for {
 		size := 0
+		rb := make([]byte, 1024)
 		nr, err := clientConn.Read(rb)
 		if nr == 0 {
 			return
@@ -192,13 +191,11 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 		readChannel := make(chan []byte)
 		go func() {
 			for {
+				rb := make([]byte, 1024)
 				log.Println("wait client data")
 				size = 0
 				nr, _, err = serverConn.ReadFrom(rb)
-				if nr > 0 {
-					wb = append(wb[:size], rb[:nr]...)
-					size += nr
-				}
+				log.Println("get client data size ", nr)
 				if err != nil {
 					if err != io.EOF {
 						log.Println("read server error: ", err)
@@ -216,7 +213,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 					break
 				}
 
-				body, err = reply.Body.Marshal(ProtocolICMP)
+				body, err := reply.Body.Marshal(ProtocolICMP)
 				if err != nil {
 					log.Println("marshal icmp echo reply body error: ", err.Error())
 					break
@@ -245,6 +242,7 @@ func (self *HikarianIcmp) transportClient(clientConn *net.TCPConn) {
 					// }
 					// log.Println("write ack size ", nw)
 					readChannel <- body[4 : nr-4]
+					// break
 				} else {
 					log.Println("receive other")
 					continue
